@@ -86,7 +86,7 @@ mod tests {
         let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
 
         assert!(
-            !matches!(res, Err(ContractError::Unauthorized {})),
+            matches!(res, Err(ContractError::Unauthorized {})),
             "Must return unauthorized error"
         );
 
