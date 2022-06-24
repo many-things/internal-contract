@@ -1,4 +1,9 @@
-use crate::{msg::ExecuteMsg, result::ContractResult, state::STATE, ContractError};
+use crate::{
+    msg::ExecuteMsg,
+    result::ContractResult,
+    state::{State, STATE},
+    ContractError,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(not(feature = "library"))] {
@@ -20,24 +25,26 @@ cfg_if::cfg_if! {
 }
 
 pub fn try_increment(deps: DepsMut) -> ContractResult<Response> {
-    STATE.update(deps.storage, |mut state| -> ContractResult<_> {
+    let action = |mut state: State| -> ContractResult<_> {
         state.count += 1;
         Ok(state)
-    })?;
+    };
 
+    STATE.update(deps.storage, action)?;
     Ok(Response::new().add_attribute("method", "try_increment"))
 }
 
 pub fn try_reset(deps: DepsMut, info: MessageInfo, count: i32) -> ContractResult<Response> {
-    STATE.update(deps.storage, |mut state| -> ContractResult<_> {
+    let action = |mut state: State| -> ContractResult<_> {
         if info.sender != state.owner {
             return Err(ContractError::Unauthorized {});
         }
         state.count = count;
         Ok(state)
-    })?;
+    };
 
-    Ok(Response::new().add_attribute("method", "reset"))
+    STATE.update(deps.storage, action)?;
+    Ok(Response::new().add_attribute("method", "try_reset"))
 }
 
 #[cfg(test)]
@@ -64,7 +71,7 @@ mod tests {
         // beneficiary can release it
         let info = mock_info("anyone", &coins(2, "token"));
         let msg = ExecuteMsg::Increment {};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let _ = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // should increase counter by 1
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
