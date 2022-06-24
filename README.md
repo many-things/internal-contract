@@ -2,4 +2,4 @@
 
 ## Cosmos
 
-- Simple Mission Protocol
+- [Simple Mission Protocol](./cosmos/mission/)
