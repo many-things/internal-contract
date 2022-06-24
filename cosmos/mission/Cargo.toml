@@ -20,6 +20,10 @@ schemars = "0.8"
 [dev-dependencies]
 cosmwasm-schema = "1"
 
+[[example]]
+name = "schema"
+path = "scripts/schema.rs"
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
