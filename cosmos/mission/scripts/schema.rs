@@ -14,9 +14,15 @@ fn main() {
     create_dir_all(&out_dir).unwrap();
     remove_schemas(&out_dir).unwrap();
 
-    export_schema(&schema_for!(InstantiateMsg), &out_dir);
-    export_schema(&schema_for!(ExecuteMsg), &out_dir);
-    export_schema(&schema_for!(QueryMsg), &out_dir);
-    export_schema(&schema_for!(State), &out_dir);
-    export_schema(&schema_for!(CountResponse), &out_dir);
+    macro_rules! generate_schema {
+        ($msg: tt) => {
+            export_schema(&schema_for!($msg), &out_dir)
+        };
+    }
+
+    generate_schema!(InstantiateMsg);
+    generate_schema!(ExecuteMsg);
+    generate_schema!(QueryMsg);
+    generate_schema!(State);
+    generate_schema!(CountResponse);
 }
