@@ -9,6 +9,7 @@ exclude = ["contract.wasm", "hash.txt"]
 
 [dependencies]
 thiserror = "1"
+cfg-if = "1"
 serde = { version = "1", default-features = false, features = ["derive"] }
 
 cosmwasm-std = "1"

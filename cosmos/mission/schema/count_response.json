@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CountResponse",
+  "description": "We define a custom struct for each query response",
   "type": "object",
   "required": [
     "count"

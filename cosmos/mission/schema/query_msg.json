@@ -3,6 +3,7 @@
   "title": "QueryMsg",
   "oneOf": [
     {
+      "description": "GetCount returns the current count as a json-encoded number",
       "type": "object",
       "required": [
         "get_count"

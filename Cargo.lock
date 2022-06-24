@@ -352,6 +352,7 @@ checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 name = "mission-contract"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
