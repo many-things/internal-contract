@@ -1,9 +1,11 @@
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 
-use crate::error::ContractError;
-use crate::msg::InstantiateMsg;
-use crate::state::{State, STATE};
+use crate::{
+    error::ContractError,
+    msg::InstantiateMsg,
+    state::{State, STATE},
+};
 
 pub mod execute;
 pub mod query;
@@ -40,11 +42,12 @@ cfg_if::cfg_if! {
 
 #[cfg(test)]
 mod tests {
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{coins, from_binary};
+
     use crate::msg::{CountResponse, QueryMsg};
 
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
 
     #[test]
     fn proper_initialization() {

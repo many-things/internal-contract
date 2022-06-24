@@ -2,8 +2,7 @@ use crate::{msg::ExecuteMsg, result::ContractResult, state::STATE, ContractError
 
 cfg_if::cfg_if! {
     if #[cfg(not(feature = "library"))] {
-        use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
-        use cosmwasm_std::entry_point;
+        use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response};
 
         #[entry_point]
         pub fn execute(
@@ -60,7 +59,7 @@ mod tests {
 
         let msg = InstantiateMsg { count: 17 };
         let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let _ = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // beneficiary can release it
         let info = mock_info("anyone", &coins(2, "token"));
@@ -79,7 +78,7 @@ mod tests {
 
         let msg = InstantiateMsg { count: 17 };
         let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let _ = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // beneficiary can release it
         let unauth_info = mock_info("anyone", &coins(2, "token"));
