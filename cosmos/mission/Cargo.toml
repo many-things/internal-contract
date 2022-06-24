@@ -1,0 +1,38 @@
+[package]
+name = "mission-contract"
+version = "0.1.0"
+authors = ["Jiseok CHOI <jiseok.dev@gmail.com>"]
+edition = "2021"
+license = "Apache-2.0"
+
+exclude = ["contract.wasm", "hash.txt"]
+
+[dependencies]
+thiserror = "1"
+serde = { version = "1", default-features = false, features = ["derive"] }
+
+cosmwasm-std = "1"
+cosmwasm-storage = "1"
+cw-storage-plus = "0.13"
+cw2 = "0.13"
+schemars = "0.8"
+
+[dev-dependencies]
+cosmwasm-schema = "1"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+
+# use library feature to disable all instantiate/execute/query exports
+library = []
+
+[package.metadata.scripts]
+optimize = """docker run --rm -v "$(pwd)":/code \
+  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
+  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  cosmwasm/rust-optimizer:0.12.5
+"""
