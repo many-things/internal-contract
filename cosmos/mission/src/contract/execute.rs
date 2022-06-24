@@ -86,10 +86,10 @@ mod tests {
         let msg = ExecuteMsg::Reset { count: 5 };
         let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
 
-        match res {
-            Err(ContractError::Unauthorized {}) => {}
-            _ => panic!("Must return unauthorized error"),
-        }
+        assert!(
+            !matches!(res, Err(ContractError::Unauthorized {})),
+            "Must return unauthorized error"
+        );
 
         // only the original creator can reset the counter
         let auth_info = mock_info("creator", &coins(2, "token"));
