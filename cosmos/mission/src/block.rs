@@ -1,18 +1,18 @@
-use cosmwasm_std::{BlockInfo, Timestamp};
+use cosmwasm_std::BlockInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug, Default)]
 pub struct BlockTime {
     pub height: u64,
-    pub time: Timestamp,
+    pub time: u64,
 }
 
 impl From<BlockInfo> for BlockTime {
     fn from(info: BlockInfo) -> Self {
         Self {
             height: info.height,
-            time: info.time,
+            time: info.time.seconds(),
         }
     }
 }
