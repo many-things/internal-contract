@@ -1,27 +1,52 @@
+use cosmwasm_std::Coin;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InstantiateMsg {
-    pub count: i32,
-}
+use crate::state::mission;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    Increment {},
-    Reset { count: i32 },
+    /// admin api
+    Withdraw {
+        denom: String,
+        amount: Option<u64>,
+    },
+    /// generate mission
+    CreateMission(CreateMissionItem),
+    CompleteMission {
+        mission_id: usize,
+        postscript: String,
+    },
+    FailedMission {
+        mission_id: usize,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct CreateMissionItem {
+    pub title: String,
+    pub coin: Coin,
+    pub ends_at: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    /// GetCount returns the current count as a json-encoded number
-    GetCount {},
-}
+    GetBalanceList {
+        denom: Option<Vec<String>>,
+    },
 
-/// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CountResponse {
-    pub count: i32,
+    GetMissionList {
+        address: Option<Vec<String>>,
+        status: Option<Vec<mission::Status>>,
+        denom: Option<Vec<String>>,
+
+        limit: Option<usize>,
+        offset: Option<usize>,
+    },
+    GetRecentlyMissionList {
+        limit: Option<usize>,
+    },
 }
