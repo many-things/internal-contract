@@ -1,10 +1,16 @@
-use {cosmwasm_std::StdError, thiserror::Error};
+use cosmwasm_std::StdError;
+use thiserror::Error;
+
+use crate::{contract::error::ExecuteError, state::error::StateError};
 
 #[derive(Error, Debug)]
 pub enum ContractError {
     #[error(transparent)]
-    Std(#[from] StdError),
+    Cosmwasm(#[from] StdError),
 
-    #[error("unauthorized")]
-    Unauthorized {},
+    #[error(transparent)]
+    Execute(#[from] ExecuteError),
+
+    #[error(transparent)]
+    State(#[from] StateError),
 }
