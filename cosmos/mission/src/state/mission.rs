@@ -12,7 +12,7 @@ use super::error::StateError;
 pub const MISSION: Map<Addr, Vec<Mission>> = Map::new("mission");
 
 pub const RECENTLY_MISSION_LIMIT: usize = 100;
-pub const RECENTLY_MISSION_LIST: SnapshotItem<[Mission; RECENTLY_MISSION_LIMIT]> = snapshot_item!(
+pub const RECENTLY_MISSION_LIST: SnapshotItem<Vec<Mission>> = snapshot_item!(
     "recently_mission_list",
     cw_storage_plus::Strategy::EveryBlock
 );

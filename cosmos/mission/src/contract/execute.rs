@@ -6,7 +6,7 @@ use crate::{
     result::ContractResult,
     state::{
         balance::BALANCE,
-        mission::{Mission, Status, MISSION},
+        mission::{Mission, Status, MISSION, RECENTLY_MISSION_LIMIT, RECENTLY_MISSION_LIST},
     },
 };
 
@@ -29,7 +29,7 @@ if #[cfg(not(feature = "library"))] {
 
         match msg {
             ExecuteMsg::Withdraw { denom: _denom, amount : _amount } => unimplemented!(),
-            ExecuteMsg::CreateMission(item) => try_create_mission(storage, sender, item),
+            ExecuteMsg::CreateMission(item) => try_create_mission(storage, block_time.height, sender, item),
             ExecuteMsg::CompleteMission { mission_id , postscript } => try_complete_mission(storage, block_time, sender, mission_id, postscript),
             ExecuteMsg::FailedMission { mission_id } => try_failed_mission(storage, sender, mission_id),
         }
@@ -39,17 +39,21 @@ if #[cfg(not(feature = "library"))] {
 
 pub fn try_create_mission(
     storage: &mut dyn Storage,
+    height: u64,
     sender: Addr,
     mission_item: CreateMissionItem,
 ) -> ContractResult<Response> {
     let mission: Mission = mission_item.into();
     let title = mission.title.clone();
     let coin = mission.coin.clone();
-    let action = move |state: Option<Vec<Mission>>| -> ContractResult<_> {
-        let mut state = state.unwrap_or_default();
-        state.push(mission);
+    let action = {
+        let mission = mission.clone();
+        move |state: Option<Vec<Mission>>| -> ContractResult<_> {
+            let mut state = state.unwrap_or_default();
+            state.push(mission.clone());
 
-        Ok(state)
+            Ok(state)
+        }
     };
 
     BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
@@ -61,6 +65,16 @@ pub fn try_create_mission(
     })?;
 
     MISSION.update(storage, sender.clone(), action)?;
+    RECENTLY_MISSION_LIST.update(storage, height, move |snapshot| -> ContractResult<_> {
+        let snapshot = snapshot.unwrap_or_default();
+        let mut snapshot: Vec<_> = [mission].into_iter().chain(snapshot.into_iter()).collect();
+
+        if snapshot.len() > RECENTLY_MISSION_LIMIT {
+            Ok(snapshot.drain(0..RECENTLY_MISSION_LIMIT).collect())
+        } else {
+            Ok(snapshot)
+        }
+    })?;
     Ok(Response::default()
         .add_attribute("method", "try_create_mission")
         .add_attribute("sender", sender)
@@ -174,7 +188,7 @@ mod tests {
             coin: Coin::new(2, "token"),
             ends_at: 10,
         };
-        super::try_create_mission(storage, sender, mission_item.clone()).unwrap();
+        super::try_create_mission(storage, 0, sender, mission_item.clone()).unwrap();
 
         mission_item.into()
     }
@@ -202,7 +216,7 @@ mod tests {
 
         let sender = "maker";
         let sender_addr = Addr::unchecked(sender);
-        let resp = super::try_create_mission(&mut storage, sender_addr, mission_item).unwrap();
+        let resp = super::try_create_mission(&mut storage, 0, sender_addr, mission_item).unwrap();
         assert_eq!(resp.attributes.len(), 5);
         assert_eq!(resp.messages.len(), 0);
 
