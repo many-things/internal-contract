@@ -430,4 +430,10 @@ mod tests {
         assert_eq_lock_balance(&mut storage, "token", Uint128::new(0));
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
     }
+
+    #[ignore]
+    #[test]
+    fn try_withdraw() {
+        todo!()
+    }
 }
