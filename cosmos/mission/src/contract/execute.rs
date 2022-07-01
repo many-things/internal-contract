@@ -5,7 +5,7 @@ use crate::{
     msg::{CreateMissionItem, ExecuteMsg},
     result::ContractResult,
     state::{
-        balance::BALANCE,
+        balance::{BALANCE, LOCK_BALANCE},
         config::CONFIG,
         mission::{
             next_id, Mission, Status, MISSION, RECENTLY_MISSION_LIMIT, RECENTLY_MISSION_LIST,
@@ -101,7 +101,7 @@ pub fn try_create_mission(
             Ok(snapshot)
         }
     })?;
-    BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
+    LOCK_BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
         let state = state.unwrap_or_default();
         let state = state
             .checked_add(coin.amount)
@@ -139,7 +139,33 @@ pub fn try_complete_mission(
             })?;
 
     if mission.is_expired(&block_time)? {
-        MISSION.update(storage, key, |_| -> ContractResult<_> { Ok(mission) })?;
+        MISSION.update(storage, key, |_| -> ContractResult<_> {
+            Ok(mission.clone())
+        })?;
+        LOCK_BALANCE.update(
+            storage,
+            mission.coin.denom.clone(),
+            move |state| -> ContractResult<_> {
+                let state = state.unwrap_or_default();
+                let state = state
+                    .checked_sub(mission.coin.amount.clone())
+                    .map_err(ExecuteError::Overflow)?;
+
+                Ok(state)
+            },
+        )?;
+        BALANCE.update(
+            storage,
+            mission.coin.denom.clone(),
+            |state| -> ContractResult<_> {
+                let state = state.unwrap_or_default();
+                let state = state
+                    .checked_add(mission.coin.amount.clone())
+                    .map_err(ExecuteError::Overflow)?;
+
+                Ok(state)
+            },
+        )?;
         return Ok(response.add_attribute("status", Status::Failed.as_ref()));
     }
     mission.new_status(Status::Success)?;
@@ -153,7 +179,7 @@ pub fn try_complete_mission(
         amount: vec![mission.coin.clone()],
     };
 
-    BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
+    LOCK_BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
         let state = state.unwrap_or_default();
         let state = state
             .checked_sub(coin.amount)
@@ -180,6 +206,39 @@ fn try_failed_mission(
             })?;
     mission.new_status(Status::Failed)?;
 
+    LOCK_BALANCE.update(
+        storage,
+        mission.coin.denom.clone(),
+        |state| -> ContractResult<_> {
+            let state = state.unwrap_or_default();
+            let state = state
+                .checked_sub(mission.coin.amount)
+                .map_err(ExecuteError::Overflow)?;
+            Ok(state)
+        },
+    )?;
+    BALANCE.update(
+        storage,
+        mission.coin.denom.clone(),
+        |state| -> ContractResult<_> {
+            let state = state.unwrap_or_default();
+            let state = state
+                .checked_add(mission.coin.amount)
+                .map_err(ExecuteError::Overflow)?;
+            Ok(state)
+        },
+    )?;
+    BALANCE.update(
+        storage,
+        mission.coin.denom.clone(),
+        |state| -> ContractResult<_> {
+            let state = state.unwrap_or_default();
+            state
+                .checked_add(mission.coin.amount)
+                .map_err(ExecuteError::Overflow)?;
+            Ok(state)
+        },
+    )?;
     MISSION.update(storage, key, |_| -> ContractResult<_> { Ok(mission) })?;
     Ok(Response::default()
         .add_attribute("method", "try_failed_mission")
@@ -194,9 +253,17 @@ mod tests {
 
     use super::*;
 
+    fn assert_eq_lock_balance(
+        storage: &mut dyn Storage,
+        denom: impl Into<String>,
+        expected: Uint128,
+    ) {
+        let amount = LOCK_BALANCE.load(storage, denom.into()).unwrap();
+        assert_eq!(amount, expected);
+    }
+
     fn assert_eq_balance(storage: &mut dyn Storage, denom: impl Into<String>, expected: Uint128) {
         let amount = BALANCE.load(storage, denom.into()).unwrap();
-
         assert_eq!(amount, expected);
     }
 
@@ -242,7 +309,7 @@ mod tests {
         assert_eq_attr(4, "amount", "2");
         assert_eq_attr(5, "mission_id", "1");
 
-        assert_eq_balance(&mut storage, "token", Uint128::new(2));
+        assert_eq_lock_balance(&mut storage, "token", Uint128::new(2));
     }
 
     #[test]
@@ -295,7 +362,7 @@ mod tests {
 
         assert_eq_bank_msg(0, addr.as_ref(), Coin::new(2, "token"));
 
-        assert_eq_balance(&mut storage, "token", Uint128::new(0));
+        assert_eq_lock_balance(&mut storage, "token", Uint128::new(0));
     }
 
     #[test]
@@ -334,6 +401,7 @@ mod tests {
         assert_eq_attr(2, "mission_id", &mission_id.to_string());
         assert_eq_attr(3, "status", "failed");
 
+        assert_eq_lock_balance(&mut storage, "token", Uint128::new(0));
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
     }
 
@@ -359,6 +427,7 @@ mod tests {
         assert_eq_attr(1, "sender", addr.as_ref());
         assert_eq_attr(2, "mission_id", &mission_id.to_string());
 
+        assert_eq_lock_balance(&mut storage, "token", Uint128::new(0));
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
     }
 }
