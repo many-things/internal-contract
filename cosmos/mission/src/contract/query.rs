@@ -9,7 +9,8 @@ cfg_if::cfg_if! {
         #[entry_point]
         pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             match msg {
-                QueryMsg::GetCount {} => to_binary(&query_count(deps)?),
+                QueryMsg::GetCount {} => query_count(deps)
+                    .map(|count| to_binary(&count))?,
             }
         }
     }
