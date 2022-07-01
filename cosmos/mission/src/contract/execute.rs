@@ -199,7 +199,7 @@ mod tests {
         mission_list
             .into_iter()
             .position(|mission| mission.title == title)
-            .expect(&format!("not found mission title: {title}"))
+            .unwrap_or_else(|| panic!("not found mission title: {title}"))
     }
 
     #[test]
