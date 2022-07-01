@@ -1,5 +1,5 @@
-use cosmwasm_std::{Addr, Coin};
-use cw_storage_plus::{Map, SnapshotItem};
+use cosmwasm_std::{Addr, Coin, StdResult, Storage};
+use cw_storage_plus::{Item, Map, SnapshotItem};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -9,7 +9,14 @@ use crate::{block::BlockTime, snapshot_item};
 
 use super::error::StateError;
 
-pub const MISSION: Map<Addr, Vec<Mission>> = Map::new("mission");
+pub const MISSION: Map<(u64, Addr), Mission> = Map::new("mission");
+pub const MISSION_COUNT: Item<u64> = Item::new("mission_count");
+
+pub fn next_id(storage: &mut dyn Storage) -> StdResult<u64> {
+    let id = MISSION_COUNT.may_load(storage)?.unwrap_or_default() + 1;
+    MISSION_COUNT.save(storage, &id)?;
+    Ok(id)
+}
 
 pub const RECENTLY_MISSION_LIMIT: usize = 100;
 pub const RECENTLY_MISSION_LIST: SnapshotItem<Vec<Mission>> = snapshot_item!(
@@ -60,14 +67,14 @@ impl Mission {
         }
     }
 
-    pub fn is_expired(&mut self, block_time: &BlockTime) -> bool {
+    pub fn is_expired(&mut self, block_time: &BlockTime) -> Result<bool, StateError> {
         let is_expired = self.ends_at < block_time.time;
 
         if is_expired {
-            let _ = self.new_status(Status::Failed);
+            self.new_status(Status::Failed)?;
         }
 
-        is_expired
+        Ok(is_expired)
     }
 
     pub fn new_status(&mut self, new_status: Status) -> Result<&mut Self, StateError> {

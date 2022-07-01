@@ -7,7 +7,7 @@ pub enum ExecuteError {
     Overflow(#[from] OverflowError),
 
     #[error("not found mission from ({sender}: {index})")]
-    NotFoundMission { sender: Addr, index: usize },
+    NotFoundMission { sender: Addr, index: u64 },
 
     #[error("not found denom")]
     NotFoundDenom { denom: String },

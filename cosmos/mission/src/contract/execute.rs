@@ -7,7 +7,9 @@ use crate::{
     state::{
         balance::BALANCE,
         config::CONFIG,
-        mission::{Mission, Status, MISSION, RECENTLY_MISSION_LIMIT, RECENTLY_MISSION_LIST},
+        mission::{
+            next_id, Mission, Status, MISSION, RECENTLY_MISSION_LIMIT, RECENTLY_MISSION_LIST,
+        },
     },
 };
 
@@ -84,27 +86,11 @@ pub fn try_create_mission(
     mission_item: CreateMissionItem,
 ) -> ContractResult<Response> {
     let mission: Mission = mission_item.into();
-    let title = mission.title.clone();
-    let coin = mission.coin.clone();
-    let action = {
-        let mission = mission.clone();
-        move |state: Option<Vec<Mission>>| -> ContractResult<_> {
-            let mut state = state.unwrap_or_default();
-            state.push(mission.clone());
+    let mission_id = next_id(storage)?;
 
-            Ok(state)
-        }
-    };
+    let Mission { coin, title, .. } = mission.clone();
 
-    BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
-        let state = state.unwrap_or_default();
-        let state = state
-            .checked_add(coin.amount)
-            .map_err(ExecuteError::Overflow)?;
-        Ok(state)
-    })?;
-
-    MISSION.update(storage, sender.clone(), action)?;
+    MISSION.save(storage, (mission_id, sender.clone()), &mission)?;
     RECENTLY_MISSION_LIST.update(storage, height, move |snapshot| -> ContractResult<_> {
         let snapshot = snapshot.unwrap_or_default();
         let mut snapshot: Vec<_> = [mission].into_iter().chain(snapshot.into_iter()).collect();
@@ -115,19 +101,27 @@ pub fn try_create_mission(
             Ok(snapshot)
         }
     })?;
+    BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
+        let state = state.unwrap_or_default();
+        let state = state
+            .checked_add(coin.amount)
+            .map_err(ExecuteError::Overflow)?;
+        Ok(state)
+    })?;
     Ok(Response::default()
         .add_attribute("method", "try_create_mission")
         .add_attribute("sender", sender)
         .add_attribute("title", title)
         .add_attribute("denom", &coin.denom)
-        .add_attribute("amount", coin.amount))
+        .add_attribute("amount", coin.amount)
+        .add_attribute("mission_id", &mission_id.to_string()))
 }
 
 pub fn try_complete_mission(
     storage: &mut dyn Storage,
     block_time: BlockTime,
     sender: Addr,
-    mission_id: usize,
+    mission_id: u64,
     postscript: String,
 ) -> ContractResult<Response> {
     let response = Response::default()
@@ -135,34 +129,23 @@ pub fn try_complete_mission(
         .add_attribute("sender", sender.to_string())
         .add_attribute("mission_id", mission_id.to_string());
 
-    let action = |state: Option<Vec<Mission>>| -> ContractResult<_> {
-        let mut state = state.unwrap_or_default();
-
-        let mission = state
-            .get_mut(mission_id)
+    let key = (mission_id, sender.clone());
+    let mut mission =
+        MISSION
+            .may_load(storage, key.clone())?
             .ok_or_else(|| ExecuteError::NotFoundMission {
                 sender: sender.clone(),
                 index: mission_id,
             })?;
-        mission.new_status(crate::state::mission::Status::Success)?;
-        mission.postscript = Some(postscript.clone());
 
-        Ok(state)
-    };
-
-    let mut mission = MISSION
-        .may_load(storage, sender.clone())?
-        .unwrap_or_default();
-    let mission = mission
-        .get_mut(mission_id)
-        .ok_or_else(|| ExecuteError::NotFoundMission {
-            sender: sender.clone(),
-            index: mission_id,
-        })?;
-
-    if mission.is_expired(&block_time) {
+    if mission.is_expired(&block_time)? {
+        MISSION.update(storage, key, |_| -> ContractResult<_> { Ok(mission) })?;
         return Ok(response.add_attribute("status", Status::Failed.as_ref()));
     }
+    mission.new_status(Status::Success)?;
+    MISSION.update(storage, key, |_| -> ContractResult<_> {
+        Ok(mission.clone())
+    })?;
 
     let coin = &mission.coin;
     let refund_message = BankMsg::Send {
@@ -170,7 +153,6 @@ pub fn try_complete_mission(
         amount: vec![mission.coin.clone()],
     };
 
-    MISSION.update(storage, sender.clone(), action)?;
     BALANCE.update(storage, coin.denom.clone(), |state| -> ContractResult<_> {
         let state = state.unwrap_or_default();
         let state = state
@@ -186,26 +168,22 @@ pub fn try_complete_mission(
 fn try_failed_mission(
     storage: &mut dyn Storage,
     sender: Addr,
-    mission_id: usize,
+    mission_id: u64,
 ) -> ContractResult<Response> {
-    let action = |state: Option<Vec<Mission>>| -> ContractResult<_> {
-        let mut state = state.unwrap_or_default();
-
-        let mission = state
-            .get_mut(mission_id)
+    let key = (mission_id, sender.clone());
+    let mut mission =
+        MISSION
+            .may_load(storage, key.clone())?
             .ok_or_else(|| ExecuteError::NotFoundMission {
                 sender: sender.clone(),
                 index: mission_id,
             })?;
-        mission.new_status(crate::state::mission::Status::Failed)?;
+    mission.new_status(Status::Failed)?;
 
-        Ok(state)
-    };
-
-    MISSION.update(storage, sender.clone(), action)?;
+    MISSION.update(storage, key, |_| -> ContractResult<_> { Ok(mission) })?;
     Ok(Response::default()
         .add_attribute("method", "try_failed_mission")
-        .add_attribute("sender", sender)
+        .add_attribute("sender", sender.clone())
         .add_attribute("mission_id", mission_id.to_string()))
 }
 
@@ -233,15 +211,6 @@ mod tests {
         mission_item.into()
     }
 
-    fn mission_id(storage: &mut dyn Storage, title: &str, sender: Addr) -> usize {
-        let mission_list = MISSION.load(storage, sender).unwrap();
-
-        mission_list
-            .into_iter()
-            .position(|mission| mission.title == title)
-            .unwrap_or_else(|| panic!("not found mission title: {title}"))
-    }
-
     #[test]
     fn try_create_mission() {
         let mut storage = MockStorage::default();
@@ -257,7 +226,7 @@ mod tests {
         let sender = "maker";
         let sender_addr = Addr::unchecked(sender);
         let resp = super::try_create_mission(&mut storage, 0, sender_addr, mission_item).unwrap();
-        assert_eq!(resp.attributes.len(), 5);
+        assert_eq!(resp.attributes.len(), 6);
         assert_eq!(resp.messages.len(), 0);
 
         let assert_eq_attr = |index: usize, key: &str, value: &str| {
@@ -271,6 +240,7 @@ mod tests {
         assert_eq_attr(2, "title", title);
         assert_eq_attr(3, "denom", denom);
         assert_eq_attr(4, "amount", "2");
+        assert_eq_attr(5, "mission_id", "1");
 
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
     }
@@ -281,8 +251,8 @@ mod tests {
         let addr = Addr::unchecked("maker");
         let postscript = "DONE!";
 
-        let mission = create_mission(&mut storage, addr.clone());
-        let mission_id = mission_id(&mut storage, &mission.title, addr.clone());
+        let _ = create_mission(&mut storage, addr.clone());
+        let mission_id = 1;
 
         let block_time = BlockTime { height: 0, time: 0 };
 
@@ -305,7 +275,7 @@ mod tests {
 
         assert_eq_attr(0, "method", "try_complete_mission");
         assert_eq_attr(1, "sender", addr.as_ref());
-        assert_eq_attr(2, "mission_id", "0");
+        assert_eq_attr(2, "mission_id", &mission_id.to_string());
         assert_eq_attr(3, "postscript", postscript);
 
         let assert_eq_bank_msg = |index: usize, address: &str, coin: Coin| {
@@ -334,8 +304,8 @@ mod tests {
         let addr = Addr::unchecked("maker");
         let postscript = "DONE!";
 
-        let mission = create_mission(&mut storage, addr.clone());
-        let mission_id = mission_id(&mut storage, &mission.title, addr.clone());
+        let _ = create_mission(&mut storage, addr.clone());
+        let mission_id = 1;
 
         let block_time = BlockTime {
             height: 20,
@@ -361,7 +331,7 @@ mod tests {
 
         assert_eq_attr(0, "method", "try_complete_mission");
         assert_eq_attr(1, "sender", addr.as_ref());
-        assert_eq_attr(2, "mission_id", "0");
+        assert_eq_attr(2, "mission_id", &mission_id.to_string());
         assert_eq_attr(3, "status", "failed");
 
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
@@ -372,8 +342,8 @@ mod tests {
         let mut storage = MockStorage::default();
         let addr = Addr::unchecked("maker");
 
-        let mission = create_mission(&mut storage, addr.clone());
-        let mission_id = mission_id(&mut storage, &mission.title, addr.clone());
+        let _ = create_mission(&mut storage, addr.clone());
+        let mission_id = 1;
 
         let resp = super::try_failed_mission(&mut storage, addr.clone(), mission_id).unwrap();
         assert_eq!(resp.attributes.len(), 3);
@@ -387,7 +357,7 @@ mod tests {
 
         assert_eq_attr(0, "method", "try_failed_mission");
         assert_eq_attr(1, "sender", addr.as_ref());
-        assert_eq_attr(2, "mission_id", "0");
+        assert_eq_attr(2, "mission_id", &mission_id.to_string());
 
         assert_eq_balance(&mut storage, "token", Uint128::new(2));
     }

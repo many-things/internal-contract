@@ -15,11 +15,11 @@ pub enum ExecuteMsg {
     /// generate mission
     CreateMission(CreateMissionItem),
     CompleteMission {
-        mission_id: usize,
+        mission_id: u64,
         postscript: String,
     },
     FailedMission {
-        mission_id: usize,
+        mission_id: u64,
     },
 }
 
