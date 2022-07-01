@@ -1,4 +1,4 @@
-use cosmwasm_std::Coin;
+use cosmwasm_std::{Coin, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ pub enum ExecuteMsg {
     /// admin api
     Withdraw {
         denom: String,
-        amount: Option<u64>,
+        amount: Option<Uint128>,
     },
     /// generate mission
     CreateMission(CreateMissionItem),

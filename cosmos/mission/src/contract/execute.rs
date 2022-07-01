@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, BankMsg, Storage};
+use cosmwasm_std::{Addr, BankMsg, Coin, Storage, Uint128};
 
 use crate::{
     block::BlockTime,
@@ -6,6 +6,7 @@ use crate::{
     result::ContractResult,
     state::{
         balance::BALANCE,
+        config::CONFIG,
         mission::{Mission, Status, MISSION, RECENTLY_MISSION_LIMIT, RECENTLY_MISSION_LIST},
     },
 };
@@ -28,13 +29,52 @@ if #[cfg(not(feature = "library"))] {
         let block_time: BlockTime = env.block.into();
 
         match msg {
-            ExecuteMsg::Withdraw { denom: _denom, amount : _amount } => unimplemented!(),
+            ExecuteMsg::Withdraw { denom, amount } => try_withdraw(storage, sender, denom, amount),
             ExecuteMsg::CreateMission(item) => try_create_mission(storage, block_time.height, sender, item),
             ExecuteMsg::CompleteMission { mission_id , postscript } => try_complete_mission(storage, block_time, sender, mission_id, postscript),
             ExecuteMsg::FailedMission { mission_id } => try_failed_mission(storage, sender, mission_id),
         }
     }
 }
+}
+
+pub fn try_withdraw(
+    storage: &mut dyn Storage,
+    sender: Addr,
+    denom: String,
+    amount: Option<Uint128>,
+) -> ContractResult<Response> {
+    let config = CONFIG.load(storage)?;
+    if &sender != config.as_ref() {
+        return Err(ExecuteError::Unauthorized { addr: sender }.into());
+    }
+
+    let balance =
+        BALANCE
+            .may_load(storage, denom.clone())?
+            .ok_or_else(|| ExecuteError::NotFoundDenom {
+                denom: denom.clone(),
+            })?;
+    let amount = match amount {
+        Some(amount) => {
+            if balance < amount {
+                return Err(ExecuteError::LackOfBalance { maximum: balance }.into());
+            }
+
+            amount
+        }
+        None => balance,
+    };
+    let coin = vec![Coin::new(amount.u128(), denom)];
+    let bank_msg = BankMsg::Send {
+        to_address: sender.to_string(),
+        amount: coin,
+    };
+
+    Ok(Response::default()
+        .add_message(bank_msg)
+        .add_attribute("method", "try_withdraw")
+        .add_attribute("amount", amount))
 }
 
 pub fn try_create_mission(
